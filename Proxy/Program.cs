@@ -8,37 +8,21 @@ using System.Threading.Tasks;
 
 namespace Proxy
 {
-	public interface I1
+	public interface ITest: IDisposable
 	{
 		void Test();
 	}
 
-	public interface I2: I1
+	class Test : ITest
 	{
-		new void Test();
-		void TestGeneric<R>(R nesto);
-	}
-
-	class Test : I2
-	{
-		public void TestGeneric<R>(R nesto)
+		public void Dispose()
 		{
-			Console.WriteLine("Generic");
+			Console.WriteLine("Disposed");
 		}
 
-		void I2.Test()
+		void ITest.Test()
 		{
-			Console.WriteLine("T2");
-		}
-
-		void I1.Test()
-		{
-			Console.WriteLine("T1");
-		}
-
-		public override string ToString()
-		{
-			return "TosStringT";
+			Console.WriteLine("Test");
 		}
 	}
 
@@ -46,18 +30,16 @@ namespace Proxy
 	{
 		static void Main(string[] args)
 		{
-			var list = new List<int>() { 1, 2, 3 };
+			var hub = new ProxyHub<ITest>(() => new Test());
 
-			void Callback()
-			{
+			var ref1 = hub.Value;
+			var ref2 = hub.Value;
 
-			}
+			ref1.Test();
+			ref2.Test();
 
-			var file = File.Open(@"C:\Users\Andrej\Desktop\nesto.txt", FileMode.Open);
-			var proxy = ProxyGenerator<IDisposable>.CreateInstance(file, Callback);
-
-			proxy.Dispose();
-			//proxy.ToString();
+			ref1.Dispose();
+			ref2.Dispose();
 
 			Console.ReadLine();
 		}

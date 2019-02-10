@@ -6,17 +6,23 @@ using System.Threading.Tasks;
 
 namespace Proxy
 {
-	interface IProxyHub<T> where T: IDisposable
+	public interface IProxyHub<T> where T: IDisposable
 	{
 		T Value { get; }
 	}
 
-	class ProxyHub<T, R> : IProxyHub<R> where R: T, IDisposable where T: IDisposable
+	public class ProxyHub<T> : IProxyHub<T> where T : class, IDisposable
 	{
+		private readonly Action _onDisposed;
+		private readonly Func<T> _producer;
+
+		private T _instance;
+		private bool _isDisposed; 
+		private int _refCount;
+		
 		static ProxyHub()
 		{
 			EnsureInterface(typeof(T));
-			EnsureInterface(typeof(R));
 
 			void EnsureInterface(Type type)
 			{
@@ -24,27 +30,45 @@ namespace Proxy
 			}
 		}
 
-		private readonly R _instance;
-		private int _refCount;
+		public ProxyHub(Func<T> producer, Action onDisposed = null)
+		{
+			_producer = producer;
+			_onDisposed = onDisposed;
+		}
 
-		public R Value
+		public T Value
 		{
 			get
 			{
+				EnsureNotDisposed();
+
+				if(_instance == null)
+				{
+					_instance = _producer();
+				}
+
 				_refCount++;
-				return _instance;
+
+				var reference = ProxyGenerator<T>.CreateInstance(_instance, RefDispose);
+				return reference;
 			}
 		}
 
-		public ProxyHub(Func<T> producer)
+		private void EnsureNotDisposed()
 		{
-			//_instance = producer();
-			_refCount = 1;
+			if (_isDisposed) throw new ObjectDisposedException(nameof(Proxy));
 		}
-	}
 
-	class ProxyHub<T>: ProxyHub<T,T> where T: IDisposable
-	{
-		public ProxyHub(Func<T> producer) : base(producer) { }
+		private void RefDispose()
+		{
+			_refCount--;
+
+			if(_refCount == 0)
+			{
+				_isDisposed = true;
+				_instance.Dispose();
+				_onDisposed?.Invoke();
+			}
+		}
 	}
 }
