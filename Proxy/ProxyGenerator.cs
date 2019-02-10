@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace Proxy
 {
-	class ProxyGenerator<T> where T: class
+	static class ProxyGenerator<T> where T: class
 	{
 		private static readonly Type _originalType = typeof(T);
 		private static readonly Type _proxyType;
@@ -21,8 +21,8 @@ namespace Proxy
 			EnsureInterface();
 
 			var assemblyName = new AssemblyName("Proxy");
-			var assemblyBuilder = AppDomain.CurrentDomain.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.RunAndSave);
-			var moduleBuilder = assemblyBuilder.DefineDynamicModule("Module", "module.dll");
+			var assemblyBuilder = AppDomain.CurrentDomain.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.Run);
+			var moduleBuilder = assemblyBuilder.DefineDynamicModule("Module");
 
 			//We want to implement all the interfaces in the hierarchy
 			var interfaces = GetInterfaces(_originalType).ToArray();
@@ -32,8 +32,6 @@ namespace Proxy
 			_isDisposed = typeBuilder.DefineField("_isDisposed", typeof(bool), FieldAttributes.Private);
 
 			_proxyType = GenerateType(typeBuilder);
-			
-			assemblyBuilder.Save(@"assembly.dll");
 		}
 
 		public static T CreateInstance(T original) => (T) Activator.CreateInstance(_proxyType, new object[] { original });
