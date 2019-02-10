@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -47,19 +48,11 @@ namespace Proxy
 		{
 			var list = new List<int>() { 1, 2, 3 };
 
-			var test = new Test();
-			var proxy = ProxyGenerator<I2>.CreateInstance(test);
+			var file = File.Open(@"C:\Users\Andrej\Desktop\nesto.txt", FileMode.Open);
+			var proxy = ProxyGenerator<IDisposable>.CreateInstance(file);
 
-			Console.WriteLine(proxy.ToString());
-
-			proxy.TestGeneric(50);
-
-			//proxy.Add(10);
-
-			//foreach (var i in proxy)
-			//{
-			//	Console.WriteLine(i);
-			//}
+			proxy.Dispose();
+			proxy.ToString();
 
 			Console.ReadLine();
 		}

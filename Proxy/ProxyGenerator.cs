@@ -13,7 +13,8 @@ namespace Proxy
 		private static readonly Type _originalType = typeof(T);
 		private static readonly Type _proxyType;
 
-		private static FieldBuilder _original;
+		private static readonly FieldBuilder _original;
+		private static readonly FieldBuilder _isDisposed; 
 
 		static ProxyGenerator()
 		{
@@ -27,6 +28,9 @@ namespace Proxy
 			var interfaces = GetInterfaces(_originalType).ToArray();
 
 			var typeBuilder = moduleBuilder.DefineType($"{typeof(T)}#Proxy", TypeAttributes.Public, typeof(object), interfaces);
+			_original = typeBuilder.DefineField("_original", _originalType, FieldAttributes.Private);
+			_isDisposed = typeBuilder.DefineField("_isDisposed", typeof(bool), FieldAttributes.Private);
+
 			_proxyType = GenerateType(typeBuilder);
 			
 			assemblyBuilder.Save(@"assembly.dll");
@@ -41,17 +45,53 @@ namespace Proxy
 
 		private static Type GenerateType(TypeBuilder typeBuilder)
 		{
-			_original = typeBuilder.DefineField("_original", _originalType, FieldAttributes.Private);
-
 			GenerateConstructor(typeBuilder);
 
 			var interfaceMethods = GetMethodsFromInterfaces(_originalType);
-			GenerateMethods(typeBuilder, interfaceMethods, true);
+			GenerateMethods(typeBuilder, interfaceMethods.Where(x => x.DeclaringType != typeof(IDisposable)), true);
 
 			var objectMethods = typeof(object).GetMethods();
 			GenerateMethods(typeBuilder, objectMethods, false);
 
+			GenerateDispose(typeBuilder);
+
 			return typeBuilder.CreateType();
+		}
+
+		private static void GenerateDispose(TypeBuilder typeBuilder)
+		{
+			var dispose = typeBuilder.DefineMethod("Dispose", MethodAttributes.Public | MethodAttributes.Virtual, CallingConventions.HasThis);
+			var il = dispose.GetILGenerator();
+
+			var notDisposedLabel = il.DefineLabel();
+
+			EmitDisposedCheck(il, notDisposedLabel);
+
+			il.MarkLabel(notDisposedLabel);
+			il.Emit(OpCodes.Ldarg_0);
+			il.Emit(OpCodes.Ldc_I4_1);
+			il.Emit(OpCodes.Stfld, _isDisposed);
+			il.EmitWriteLine("Dispose");
+			il.Emit(OpCodes.Ret);
+
+			typeBuilder.DefineMethodOverride(dispose, typeof(IDisposable).GetMethod(nameof(IDisposable.Dispose)));
+		}
+
+		private static void EmitDisposedCheck(ILGenerator il, Label notDisposedLabel)
+		{
+			var exceptionConstructor = typeof(ObjectDisposedException).GetConstructor(new Type[] { typeof(string) });
+
+			il.Emit(OpCodes.Ldarg_0);
+			il.Emit(OpCodes.Ldfld, _isDisposed);
+			il.Emit(OpCodes.Brfalse, notDisposedLabel);
+
+			il.Emit(OpCodes.Ldarg_0);
+			il.Emit(OpCodes.Ldfld, _original);
+			il.Emit(OpCodes.Call, typeof(object).GetMethod(nameof(object.GetType)));
+			il.Emit(OpCodes.Callvirt, typeof(Type).GetProperty(nameof(Type.Name)).GetGetMethod());
+
+			il.Emit(OpCodes.Newobj, exceptionConstructor);
+			il.Emit(OpCodes.Throw);
 		}
 
 		private static void GenerateMethods(TypeBuilder typeBuilder, IEnumerable<MethodInfo> originalMethods, bool defineOverride)
@@ -73,8 +113,11 @@ namespace Proxy
 
 				var il = method.GetILGenerator();
 
-				il.EmitWriteLine(methodName);
+				var notDisposedLabel = il.DefineLabel();
 
+				EmitDisposedCheck(il, notDisposedLabel);
+
+				il.MarkLabel(notDisposedLabel);
 				//Load the reference to the wrapped object
 				il.Emit(OpCodes.Ldarg_0);
 				il.Emit(OpCodes.Ldfld, _original);
