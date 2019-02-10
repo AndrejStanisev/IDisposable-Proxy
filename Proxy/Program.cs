@@ -48,11 +48,16 @@ namespace Proxy
 		{
 			var list = new List<int>() { 1, 2, 3 };
 
+			void Callback()
+			{
+
+			}
+
 			var file = File.Open(@"C:\Users\Andrej\Desktop\nesto.txt", FileMode.Open);
-			var proxy = ProxyGenerator<IDisposable>.CreateInstance(file);
+			var proxy = ProxyGenerator<IDisposable>.CreateInstance(file, Callback);
 
 			proxy.Dispose();
-			proxy.ToString();
+			//proxy.ToString();
 
 			Console.ReadLine();
 		}

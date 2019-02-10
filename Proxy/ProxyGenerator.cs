@@ -14,7 +14,8 @@ namespace Proxy
 		private static readonly Type _proxyType;
 
 		private static readonly FieldBuilder _original;
-		private static readonly FieldBuilder _isDisposed; 
+		private static readonly FieldBuilder _isDisposed;
+		private static readonly FieldBuilder _disposeCallback;
 
 		static ProxyGenerator()
 		{
@@ -28,13 +29,15 @@ namespace Proxy
 			var interfaces = GetInterfaces(_originalType).ToArray();
 
 			var typeBuilder = moduleBuilder.DefineType($"{typeof(T)}#Proxy", TypeAttributes.Public, typeof(object), interfaces);
-			_original = typeBuilder.DefineField("_original", _originalType, FieldAttributes.Private);
-			_isDisposed = typeBuilder.DefineField("_isDisposed", typeof(bool), FieldAttributes.Private);
+
+			_original = typeBuilder.DefineField(nameof(_original), _originalType, FieldAttributes.Private);
+			_isDisposed = typeBuilder.DefineField(nameof(_isDisposed), typeof(bool), FieldAttributes.Private);
+			_disposeCallback = typeBuilder.DefineField(nameof(_disposeCallback), typeof(Action), FieldAttributes.Private);
 
 			_proxyType = GenerateType(typeBuilder);
 		}
 
-		public static T CreateInstance(T original) => (T) Activator.CreateInstance(_proxyType, new object[] { original });
+		public static T CreateInstance(T original, Action callback) => (T) Activator.CreateInstance(_proxyType, new object[] { original, callback });
 
 		private static void EnsureInterface()
 		{
@@ -69,7 +72,10 @@ namespace Proxy
 			il.Emit(OpCodes.Ldarg_0);
 			il.Emit(OpCodes.Ldc_I4_1);
 			il.Emit(OpCodes.Stfld, _isDisposed);
-			il.EmitWriteLine("Dispose");
+
+			il.Emit(OpCodes.Ldarg_0);
+			il.Emit(OpCodes.Ldfld, _disposeCallback);
+			il.Emit(OpCodes.Callvirt, typeof(Action).GetMethod(nameof(Action.Invoke)));
 			il.Emit(OpCodes.Ret);
 
 			typeBuilder.DefineMethodOverride(dispose, typeof(IDisposable).GetMethod(nameof(IDisposable.Dispose)));
@@ -140,11 +146,17 @@ namespace Proxy
 	
 		private static void GenerateConstructor(TypeBuilder typeBuilder)
 		{
-			var constructor = typeBuilder.DefineConstructor(MethodAttributes.Public, CallingConventions.HasThis, new Type[] { _originalType });
+			var constructor = typeBuilder.DefineConstructor(MethodAttributes.Public, CallingConventions.HasThis, new Type[] { _originalType, typeof(Action) });
 			var il = constructor.GetILGenerator();
+
 			il.Emit(OpCodes.Ldarg_0);
 			il.Emit(OpCodes.Ldarg_1);
 			il.Emit(OpCodes.Stfld, _original);
+
+			il.Emit(OpCodes.Ldarg_0);
+			il.Emit(OpCodes.Ldarg_2);
+			il.Emit(OpCodes.Stfld, _disposeCallback);
+
 			il.Emit(OpCodes.Ret);
 		}
 
